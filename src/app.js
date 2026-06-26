@@ -10,7 +10,7 @@ app.get("/health", (req, res) => {
 
 // Greeting endpoint
 app.get("/api/hello", (req, res) => {
-  const name = req.query.name || "world2";
+  const name = req.query.name || "world";
   res.json({ message: `Hello, ${name}!` });
 });
 
