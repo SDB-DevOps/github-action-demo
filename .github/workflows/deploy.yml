@@ -26,10 +26,10 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
 
           script: |
-            echo "Deploying Backstage..."
+            echo "Deploying App..."
 
-            kubectl -n backstage rollout restart deployment backstage
+            kubectl rollout restart deployment github-action-demo
 
-            kubectl -n backstage rollout status deployment backstage --timeout=300s
+            kubectl rollout status deployment github-action-demo --timeout=300s
 
-            kubectl get pods -n backstage
+            kubectl get pods
