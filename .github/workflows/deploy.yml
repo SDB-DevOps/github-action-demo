@@ -1,0 +1,35 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Run only when the CI workflow finished successfully
+    # (manual workflow_dispatch runs have no workflow_run context, so allow those too)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to K3S
+        uses: appleboy/ssh-action@v1.2.0
+
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+
+          script: |
+            echo "Deploying Backstage..."
+
+            kubectl -n backstage rollout restart deployment backstage
+
+            kubectl -n backstage rollout status deployment backstage --timeout=300s
+
+            kubectl get pods -n backstage
