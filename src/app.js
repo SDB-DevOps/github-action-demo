@@ -11,7 +11,7 @@ app.get("/health", (req, res) => {
 // Greeting endpoint
 app.get("/api/hello", (req, res) => {
   const name = req.query.name || "world";
-  res.json({ message: `你好, ${name}!` });
+  res.json({ message: `Hello, ${name}!` });
 });
 
 // Simple add endpoint to exercise some logic in tests
