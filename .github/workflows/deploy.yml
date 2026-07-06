@@ -1,5 +1,9 @@
 name: Deploy
 
+# GitOps deploy: instead of touching the cluster directly, this workflow bumps
+# the deployed image tag in the GitOps repo and opens a PR. Merging that PR is
+# what triggers ArgoCD to sync the new image into the cluster.
+
 on:
   workflow_run:
     workflows: ["CI"]
@@ -8,28 +12,63 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# The GitOps repository that ArgoCD watches.
+env:
+  GITOPS_REPO: sdb-devops/github-action-demo-gitops
+  GITOPS_IMAGE_PATH: apps/github-action-demo
+  IMAGE_NAME: ghcr.io/sdb-devops/github-action-demo
+
 jobs:
-  deploy:
-    # Run only when the CI workflow finished successfully
-    # (manual workflow_dispatch runs have no workflow_run context, so allow those too)
+  open-gitops-pr:
+    # Run only when CI finished successfully (manual dispatch has no
+    # workflow_run context, so allow those too).
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to K3S
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Resolve image tag
+        id: tag
+        run: |
+          # The commit that CI built: from workflow_run, or the current ref on
+          # a manual dispatch. CI publishes `type=sha` => sha-<7 chars>.
+          FULL_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          SHORT_SHA="${FULL_SHA:0:7}"
+          echo "image_tag=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Deploying tag: sha-${SHORT_SHA}"
 
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          # We open the PR from a branch we push, so a full clone is fine.
+          fetch-depth: 0
 
-          script: |
-            echo "Deploying App..."
+      - name: Install kustomize
+        uses: imranismail/setup-kustomize@v2
 
-            kubectl rollout restart deployment github-action-demo
+      - name: Bump image tag
+        working-directory: ${{ env.GITOPS_IMAGE_PATH }}
+        run: |
+          kustomize edit set image "${IMAGE_NAME}:${{ steps.tag.outputs.image_tag }}"
+          echo "----- resulting kustomization.yaml -----"
+          cat kustomization.yaml
 
-            kubectl rollout status deployment github-action-demo --timeout=300s
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITOPS_TOKEN }}
+          commit-message: "deploy: github-action-demo ${{ steps.tag.outputs.image_tag }}"
+          branch: deploy/github-action-demo-${{ steps.tag.outputs.short_sha }}
+          delete-branch: true
+          title: "Deploy github-action-demo `${{ steps.tag.outputs.image_tag }}`"
+          body: |
+            Automated deploy PR from
+            [`${{ github.repository }}`](https://github.com/${{ github.repository }}).
 
-            kubectl get pods
+            - **Image:** `${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.image_tag }}`
+            - **Source commit:** ${{ github.event.workflow_run.head_sha || github.sha }}
+
+            Merging this PR triggers ArgoCD to sync the new image into the cluster.
