@@ -1,0 +1,20 @@
+name: CI-TEST
+
+# 最小占位 workflow —— 由 Backstage Scaffolder 生成。
+# 请把下面的 Placeholder 步骤替换成真实的构建/测试逻辑。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Placeholder
+        run: echo "Replace this step with your real CI steps"
